@@ -52,10 +52,10 @@ class Namespace(int):
     """
 
     def __or__(self, other):
-        return "|".join([str(self), str(other)])
+        return "|".join([self, other])
 
     def __ror__(self, other):
-        return "|".join([str(other), str(self)])
+        return "|".join([other, self])
 
 
 VERSION = "1.4"
@@ -143,7 +143,7 @@ class Wiki:
                     attr = "NS_%s" % (nsdata[ns]["*"].replace(" ", "_").upper())
             else:
                 attr = "NS_MAIN"
-            setattr(self, attr.encode("utf8"), Namespace(ns.encode("utf8")))
+            setattr(self, attr, Namespace(ns))
         nsaliasdata = info["query"]["namespacealiases"]
         if nsaliasdata:
             for ns in nsaliasdata:

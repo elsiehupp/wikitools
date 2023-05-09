@@ -21,7 +21,8 @@
 # along with wikitools3.  If not, see <http://www.gnu.org/licenses/>.
 
 import io
-import urllib
+# import urllib
+import urllib.request
 import warnings
 
 import wikitools3.api as api
@@ -219,10 +220,19 @@ class File(page.Page):
         url = res["query"]["pages"][key]["imageinfo"][0]["url"]
         if not location:
             location = self.title.split(":", 1)[1]
-        opener = urllib.build_opener(urllib.HTTPCookieProcessor(self.site.cookies))
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.site.cookies))
         headers = {"User-agent": self.site.useragent}
-        request = urllib.Request(url, None, headers)
+        request = urllib.request.Request(url, None, headers)
+
+        # In Python 3, urlopen does not accept a string as data
+        # so we need to encode it first
+        if isinstance(request.data, str):
+            request.data = request.data.encode("utf-8")
         data = opener.open(request)
+        # then decode it back to a string
+        if isinstance(request.data, bytes):
+            request.data = request.data.decode("utf-8")
+
         f = open(location, "wb", 0)
         f.write(data.read())
         f.close()

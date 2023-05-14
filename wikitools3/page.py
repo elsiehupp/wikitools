@@ -21,7 +21,8 @@
 
 import datetime
 import unicodedata
-import urllib
+# import urllib
+import urllib.parse
 from hashlib import md5
 
 import wikitools3.api as api

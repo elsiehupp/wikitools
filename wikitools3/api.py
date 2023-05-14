@@ -27,6 +27,7 @@ import re
 import sys
 import time
 import urllib
+import urllib.request
 import warnings
 from urllib.parse import quote_plus
 
@@ -39,7 +40,7 @@ import json
 
 try:
     import gzip
-    from io import StringIO
+    import io
 except:
     gzip = False
 
@@ -98,13 +99,13 @@ class APIRequest:
                 base64.encodestring(wiki.auth + ":" + wiki.httppass)
             ).replace("\n", "")
         if hasattr(wiki, "passman"):
-            self.opener = urllib.build_opener(
-                urllib.HTTPDigestAuthHandler(wiki.passman),
-                urllib.HTTPCookieProcessor(wiki.cookies),
+            self.opener = urllib.request.build_opener(
+                urllib.request.HTTPDigestAuthHandler(wiki.passman),
+                urllib.request.HTTPCookieProcessor(wiki.cookies),
             )
         else:
-            self.opener = urllib.build_opener(urllib.HTTPCookieProcessor(wiki.cookies))
-        self.request = urllib.Request(self.wiki.apibase, self.encodeddata, self.headers)
+            self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(wiki.cookies))
+        self.request = urllib.request.Request(self.wiki.apibase, self.encodeddata, self.headers)
 
     def setMultipart(self, multipart=True):
         """Enable multipart data transfer, required for file uploads."""
@@ -148,7 +149,7 @@ class APIRequest:
             self.encodeddata = urlencode(self.data, 1)
             self.headers["Content-Length"] = str(len(self.encodeddata))
             self.headers["Content-Type"] = "application/x-www-form-urlencoded"
-        self.request = urllib.Request(self.wiki.apibase, self.encodeddata, self.headers)
+        self.request = urllib.request.Request(self.wiki.apibase, self.encodeddata, self.headers)
 
     def query(self, querycontinue=True):
         """Actually do the query here and return usable stuff
@@ -274,14 +275,21 @@ for queries requring multiple requests""",
                     catcherror = None
                 else:
                     catcherror = Exception
+
+                # In Python 3, urlopen does not accept a string as data
+                # so we need to encode it first
+                if isinstance(self.request.data, str):
+                    self.request.data = self.request.data.encode("utf-8")
                 data = self.opener.open(self.request)
+                # then decode it back to a string
+                if isinstance(self.request.data, bytes):
+                    self.request.data = self.request.data.decode("utf-8")
+
                 self.response = data.info()
                 if gzip:
                     encoding = self.response.get("Content-encoding")
                     if encoding in ("gzip", "x-gzip"):
-                        data = gzip.GzipFile(
-                            "", "rb", 9, StringIO.StringIO(data.read())
-                        )
+                        data = gzip.open(io.BytesIO(data.read()), "rb")
             except catcherror as exc:
                 errname = sys.exc_info()[0].__name__
                 errinfo = exc
@@ -424,7 +432,11 @@ def urlencode(query, doseq=0):
             if isinstance(v, str):
                 v = quote_plus(v)
                 l.append(k + "=" + v)
-            elif v.type(str):
+            elif isinstance(v, (int, float)):
+                v = quote_plus(str(v))
+                l.append(k + "=" + v)
+            elif v.type(str): # TODO: .type() broken for python 3
+
                 # is there a reasonable way to convert to ASCII?
                 # encode generates a string, but "replace" or "ignore"
                 # lose information and "strict" can raise UnicodeError

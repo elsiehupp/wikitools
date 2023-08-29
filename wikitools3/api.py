@@ -75,7 +75,7 @@ class APIRequest:
         self.iswrite = write
         if wiki.assertval is not None and self.iswrite:
             self.data["assert"] = wiki.assertval
-        if not "maxlag" in self.data and not wiki.maxlag < 0:
+        if "maxlag" not in self.data and wiki.maxlag >= 0:
             self.data["maxlag"] = wiki.maxlag
         self.multipart = multipart
         if self.multipart:
@@ -96,7 +96,7 @@ class APIRequest:
         self.response = False
         if wiki.auth:
             self.headers["Authorization"] = "Basic {0}".format(
-                base64.encodestring(wiki.auth + ":" + wiki.httppass)
+                base64.encodestring(f"{wiki.auth}:{wiki.httppass}")
             ).replace("\n", "")
         if hasattr(wiki, "passman"):
             self.opener = urllib.request.build_opener(
@@ -204,10 +204,9 @@ for queries requring multiple requests""",
             yield data
             if "continue" not in data:
                 break
-            else:
-                self.request = copy.deepcopy(reqcopy)
-                for param in data["continue"]:
-                    self.changeParam(param, data["continue"][param])
+            self.request = copy.deepcopy(reqcopy)
+            for param in data["continue"]:
+                self.changeParam(param, data["continue"][param])
 
     def __longQuery(self, initialdata):
         """For queries that require multiple requests"""
@@ -261,10 +260,7 @@ for queries requring multiple requests""",
             res = req.query(False)
             for type in possiblecontinues:
                 total = resultCombine(type, total, res)
-            if "query-continue" in res:
-                numkeys = len(res["query-continue"].keys())
-            else:
-                numkeys = 0
+            numkeys = len(res["query-continue"].keys()) if "query-continue" in res else 0
         return total
 
     def __getRaw(self):
@@ -324,9 +320,8 @@ for queries requring multiple requests""",
                                 1
                             )
                         )
-                        if lagtime > self.wiki.maxwaittime:
-                            lagtime = self.wiki.maxwaittime
-                        print("Server lag, sleeping for " + str(lagtime) + " seconds")
+                        lagtime = min(lagtime, self.wiki.maxwaittime)
+                        print(f"Server lag, sleeping for {str(lagtime)} seconds")
                         maxlag = True
                         time.sleep(int(lagtime) + 0.5)
                         return False
@@ -363,34 +358,19 @@ def resultCombine(type, old, new):
         ret["query"][type].extend(new["query"][type])
     else:  # Else its some sort of prop=thing and/or a generator query
         for key in new["query"]["pages"].keys():  # Go through each page
-            if not key in old["query"]["pages"]:  # if it only exists in the new one
+            if key not in old["query"]["pages"]:  # if it only exists in the new one
                 ret["query"]["pages"][key] = new["query"]["pages"][
                     key
                 ]  # add it to the list
-            else:
-                if not type in new["query"]["pages"][key]:
-                    continue
-                elif (
-                    type in new["query"]["pages"][key]
-                    and not type in ret["query"]["pages"][key]
-                ):  # if only the new one does, just add it to the return
-                    ret["query"]["pages"][key][type] = new["query"]["pages"][key][type]
-                    continue
-                else:  # Need to check for possible duplicates for some, this is faster than just iterating over new and checking for dups in ret
-                    retset = set(
-                        [
-                            tuple(entry.items())
-                            for entry in ret["query"]["pages"][key][type]
-                        ]
-                    )
-                    newset = set(
-                        [
-                            tuple(entry.items())
-                            for entry in new["query"]["pages"][key][type]
-                        ]
-                    )
-                    retset.update(newset)
-                    ret["query"]["pages"][key][type] = [dict(entry) for entry in retset]
+            elif type not in new["query"]["pages"][key]:
+                continue
+            elif type not in ret["query"]["pages"][key]:  # if only the new one does, just add it to the return
+                ret["query"]["pages"][key][type] = new["query"]["pages"][key][type]
+            else:  # Need to check for possible duplicates for some, this is faster than just iterating over new and checking for dups in ret
+                retset = {tuple(entry.items()) for entry in ret["query"]["pages"][key][type]}
+                newset = {tuple(entry.items()) for entry in new["query"]["pages"][key][type]}
+                retset.update(newset)
+                ret["query"]["pages"][key][type] = [dict(entry) for entry in retset]
     return ret
 
 
@@ -425,23 +405,23 @@ def urlencode(query, doseq=0):
         for k, v in query:
             k = quote_plus(str(k))
             v = quote_plus(str(v))
-            l.append(k + "=" + v)
+            l.append(f"{k}={v}")
     else:
         for k, v in query:
             k = quote_plus(str(k))
             if isinstance(v, str):
                 v = quote_plus(v)
-                l.append(k + "=" + v)
+                l.append(f"{k}={v}")
             elif isinstance(v, (int, float)):
                 v = quote_plus(str(v))
-                l.append(k + "=" + v)
+                l.append(f"{k}={v}")
             elif v.type(str): # TODO: .type() broken for python 3
 
                 # is there a reasonable way to convert to ASCII?
                 # encode generates a string, but "replace" or "ignore"
                 # lose information and "strict" can raise UnicodeError
                 v = quote_plus(v.encode("utf8", "replace"))
-                l.append(k + "=" + v)
+                l.append(f"{k}={v}")
             else:
                 try:
                     # is this a sufficient test for sequence-ness?
@@ -449,9 +429,8 @@ def urlencode(query, doseq=0):
                 except TypeError:
                     # not a sequence
                     v = quote_plus(str(v))
-                    l.append(k + "=" + v)
+                    l.append(f"{k}={v}")
                 else:
                     # loop over the sequence
-                    for elt in v:
-                        l.append(k + "=" + quote_plus(str(elt)))
+                    l.extend(f"{k}={quote_plus(str(elt))}" for elt in v)
     return "&".join(l)

@@ -175,10 +175,7 @@ def listFromPageids(site, pageids, check=True, followRedir=False):
                 params["redirects"] = ""
             req = api.APIRequest(site, params)
             res = req.query()
-            if not response:
-                response = res
-            else:
-                response = api.resultCombine("", response, res)
+            response = res if not response else api.resultCombine("", response, res)
         for key in response["query"]["pages"].keys():
             res = response["query"]["pages"][key]
             item = makePage(key, res, site)
@@ -187,9 +184,7 @@ def listFromPageids(site, pageids, check=True, followRedir=False):
 
 
 def makePage(key, result, site):
-    title = False
-    if "title" in result:
-        title = result["title"]
+    title = result["title"] if "title" in result else False
     if "ns" in result and result["ns"] == 14:
         item = category.Category(
             site, title=title, check=False, followRedir=False, pageid=key

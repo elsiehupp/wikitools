@@ -92,8 +92,7 @@ class File(page.Page):
         self.filehistory = []
         for data in req.queryGen():
             pid = data["query"]["pages"].keys()[0]
-            for item in data["query"]["pages"][pid]["imageinfo"]:
-                self.filehistory.append(item)
+            self.filehistory.extend(iter(data["query"]["pages"][pid]["imageinfo"]))
         return self.filehistory
 
     def getUsage(self, titleonly=False, force=False, namespaces=False):
@@ -181,8 +180,7 @@ class File(page.Page):
     def __extractToList(self, json, stuff):
         list = []
         if stuff in json["query"]:
-            for item in json["query"][stuff]:
-                list.append(item["title"])
+            list.extend(item["title"] for item in json["query"][stuff])
         return list
 
     def download(self, width=False, height=False, location=False):
@@ -233,9 +231,8 @@ class File(page.Page):
         if isinstance(request.data, bytes):
             request.data = request.data.decode("utf-8")
 
-        f = open(location, "wb", 0)
-        f.write(data.read())
-        f.close()
+        with open(location, "wb", 0) as f:
+            f.write(data.read())
         return location
 
     def upload(
@@ -294,7 +291,7 @@ class File(page.Page):
                             "File is a duplicate of "
                             + res["upload"]["warnings"]["duplicate"][0]
                         )
-                    elif warning == "page-exists" or warning == "exists":
+                    elif warning in ["page-exists", "exists"]:
                         print(
                             "Page already exists: " + res["upload"]["warnings"][warning]
                         )

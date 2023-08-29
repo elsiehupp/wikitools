@@ -57,18 +57,17 @@ def namespaceDetect(title, site):
     bits = title.split(":", 1)
     if len(bits) == 1 or bits[0] == "":
         return 0
+    nsprefix = bits[
+        0
+    ].lower()  # wp:Foo and caTEGory:Foo are normalized by MediaWiki
+    for ns in site.namespaces:
+        if nsprefix == site.namespaces[ns]["*"].lower():
+            return int(ns)
     else:
-        nsprefix = bits[
-            0
-        ].lower()  # wp:Foo and caTEGory:Foo are normalized by MediaWiki
-        for ns in site.namespaces:
-            if nsprefix == site.namespaces[ns]["*"].lower():
-                return int(ns)
-        else:
-            if site.NSaliases:
-                for ns in site.NSaliases:
-                    if nsprefix == ns.lower():
-                        return int(site.NSaliases[ns])
+        if site.NSaliases:
+            for ns in site.NSaliases:
+                if nsprefix == ns.lower():
+                    return int(site.NSaliases[ns])
     return 0
 
 
@@ -100,10 +99,7 @@ class Page(object):
         if not title and not pageid:
             raise wiki.WikiError("No title or pageid given")
         self.site = site
-        if pageid:
-            self.pageid = int(pageid)
-        else:
-            self.pageid = 0
+        self.pageid = int(pageid) if pageid else 0
         self.followRedir = followRedir
         self.title = title
         self.unprefixedtitle = False  # will be set later
@@ -134,16 +130,15 @@ class Page(object):
         # pageid, exists, title, unprefixedtitle, namespace
         if check:
             self.setPageInfo()
-        else:
-            if self.namespace is False and self.title:
-                self.namespace = namespaceDetect(self.title, self.site)
-                if self.namespace != 0:
-                    nsname = self.site.namespaces[self.namespace]["*"]
-                    self.unprefixedtitle = self.title.split(":", 1)[1]
-                    self.title = ":".join((nsname, self.unprefixedtitle))
-                else:
-                    self.unprefixedtitle = self.title
+        elif self.namespace is False and self.title:
+            self.namespace = namespaceDetect(self.title, self.site)
+            if self.namespace == 0:
+                self.unprefixedtitle = self.title
 
+            else:
+                nsname = self.site.namespaces[self.namespace]["*"]
+                self.unprefixedtitle = self.title.split(":", 1)[1]
+                self.title = ":".join((nsname, self.unprefixedtitle))
         if section or sectionnumber is not None:
             self.setSection(section, sectionnumber)
         else:
@@ -191,8 +186,7 @@ class Page(object):
             else:
                 self.unprefixedtitle = self.title
         self.pageid = int(self.pageid)
-        if self.pageid < 0:
-            self.pageid = 0
+        self.pageid = max(self.pageid, 0)
         return self
 
     def setNamespace(self, newns, recheck=False):
@@ -203,7 +197,7 @@ class Page(object):
         recheck - redo pageinfo checks
 
         """
-        if not newns in self.site.namespaces.keys():
+        if newns not in self.site.namespaces.keys():
             raise BadNamespace
         if self.namespace == newns:
             return self.namespace
@@ -270,7 +264,7 @@ class Page(object):
         req = api.APIRequest(self.site, params)
         response = req.query()
         for item in response["parse"]["sections"]:
-            if section == item["line"] or section == item["anchor"]:
+            if section in [item["line"], item["anchor"]]:
                 if item["index"].startswith(
                     "T"
                 ):  # TODO: It would be cool if it set the page title to the template in this case
@@ -290,7 +284,7 @@ class Page(object):
         params = {"action": "query", "redirects": ""}
         if not self.exists:
             raise NoPage
-        if self.pageid != 0 and self.exists:
+        if self.pageid != 0:
             params["pageids"] = self.pageid
         elif self.title:
             params["titles"] = self.title
@@ -302,10 +296,7 @@ class Page(object):
                 raise NoPage
         req = api.APIRequest(self.site, params)
         res = req.query(False)
-        if "redirects" in res["query"]:
-            return True
-        else:
-            return False
+        return "redirects" in res["query"]
 
     def isTalk(self):
         """Is the page a discussion page?"""
@@ -333,13 +324,10 @@ class Page(object):
         else:
             newns = self.site.namespaces[ns + 1]["*"]
         try:
-            pagename = self.title.split(nsname + ":", 1)[1]
+            pagename = self.title.split(f"{nsname}:", 1)[1]
         except:
             pagename = self.title
-        if newns != "":
-            newname = newns + ":" + pagename
-        else:
-            newname = pagename
+        newname = f"{newns}:{pagename}" if newns != "" else pagename
         return Page(self.site, newname, check, followRedir)
 
     def getWikiText(self, expandtemplates=False, force=False):
@@ -422,11 +410,8 @@ class Page(object):
             "action": "query",
             "prop": "info",
             "inprop": "protection",
+            "titles": self.title,
         }
-        if not self.exists or self.pageid <= 0:
-            params["titles"] = self.title
-        else:
-            params["titles"] = self.title
         req = api.APIRequest(self.site, params)
         response = req.query(False)
         for pr in response["query"].values()[0].values()[0]["protection"]:
@@ -558,7 +543,7 @@ class Page(object):
             self.setPageInfo()
         if not self.exists:
             raise NoPage
-        if direction != "newer" and direction != "older":
+        if direction not in ["newer", "older"]:
             raise wiki.WikiError("direction must be 'newer' or 'older'")
         params = {
             "action": "query",
@@ -584,9 +569,7 @@ class Page(object):
         if not self.pageid:
             self.pageid = int(id)
         revs = response["query"]["pages"][id]["revisions"]
-        rvc = None
-        if "continue" in response:
-            rvc = response["continue"]
+        rvc = response["continue"] if "continue" in response else None
         return (revs, rvc)
 
     def __extractToList(self, json, stuff):
@@ -594,8 +577,10 @@ class Page(object):
         if self.pageid == 0:
             self.pageid = json["query"]["pages"].keys()[0]
         if stuff in json["query"]["pages"][str(self.pageid)]:
-            for item in json["query"]["pages"][str(self.pageid)][stuff]:
-                list.append(item["title"])
+            list.extend(
+                item["title"]
+                for item in json["query"]["pages"][str(self.pageid)][stuff]
+            )
         return list
 
     def edit(self, *args, **kwargs):
@@ -611,28 +596,26 @@ class Page(object):
         'basetime' is equivalent to 'basetimestamp'
 
         """
-        validargs = set(
-            [
-                "text",
-                "summary",
-                "minor",
-                "notminor",
-                "bot",
-                "basetimestamp",
-                "starttimestamp",
-                "recreate",
-                "createonly",
-                "nocreate",
-                "watch",
-                "unwatch",
-                "watchlist",
-                "prependtext",
-                "appendtext",
-                "section",
-                "captchaword",
-                "captchaid",
-            ]
-        )
+        validargs = {
+            "text",
+            "summary",
+            "minor",
+            "notminor",
+            "bot",
+            "basetimestamp",
+            "starttimestamp",
+            "recreate",
+            "createonly",
+            "nocreate",
+            "watch",
+            "unwatch",
+            "watchlist",
+            "prependtext",
+            "appendtext",
+            "section",
+            "captchaword",
+            "captchaid",
+        }
         # For backwards compatibility
         if "newtext" in kwargs:
             kwargs["text"] = kwargs["newtext"]
@@ -642,21 +625,18 @@ class Page(object):
             del kwargs["basetime"]
         if len(args) and "text" not in kwargs:
             kwargs["text"] = args[0]
-        skipmd5 = False
-        if "skipmd5" in kwargs and kwargs["skipmd5"]:
-            skipmd5 = True
-        invalid = set(kwargs.keys()).difference(validargs)
-        if invalid:
+        skipmd5 = bool("skipmd5" in kwargs and kwargs["skipmd5"])
+        if invalid := set(kwargs.keys()).difference(validargs):
             for arg in invalid:
                 del kwargs[arg]
         if not self.title:
             self.setPageInfo()
-        if not "section" in kwargs and self.section is not False:
+        if "section" not in kwargs and self.section is not False:
             kwargs["section"] = self.section
         if (
-            not "text" in kwargs
-            and not "prependtext" in kwargs
-            and not "appendtext" in kwargs
+            "text" not in kwargs
+            and "prependtext" not in kwargs
+            and "appendtext" not in kwargs
         ):
             raise EditError("No text specified")
         if "prependtext" in kwargs and "section" in kwargs:
@@ -682,7 +662,7 @@ class Page(object):
                 hashtext = str(hashtext)
             hashtext = unicodedata.normalize("NFC", hashtext).encode("utf8")
             params["md5"] = md5(hashtext).hexdigest()
-        params.update(kwargs)
+        params |= kwargs
         req = api.APIRequest(self.site, params, write=True)
         result = req.query()
         if "edit" in result and result["edit"]["result"] == "Success":
@@ -747,17 +727,11 @@ class Page(object):
                 self.unprefixedtitle = self.title
             if not isinstance(self.title, str):
                 self.title = str(self.title, "utf-8")
-                self.urltitle = (
-                    urllib.parse.quote(self.title.encode("utf-8"))
-                    .replace("%20", "_")
-                    .replace("%2F", "/")
-                )
-            else:
-                self.urltitle = (
-                    urllib.parse.quote(self.title.encode("utf-8"))
-                    .replace("%20", "_")
-                    .replace("%2F", "/")
-                )
+            self.urltitle = (
+                urllib.parse.quote(self.title.encode("utf-8"))
+                .replace("%20", "_")
+                .replace("%2F", "/")
+            )
         return result
 
     def protect(self, restrictions={}, expirations={}, reason=False, cascade=False):
@@ -780,21 +754,15 @@ class Page(object):
             raise ProtectError("More expirations than restrictions given")
         token = self.site.getToken("csrf")
         protections = ""
-        expiry = ""
-        if isinstance(expirations, str):
-            expiry = expirations
+        expiry = expirations if isinstance(expirations, str) else ""
         for type in restrictions:
             if protections:
                 protections += "|"
-            protections += type + "=" + restrictions[type]
-            if isinstance(expirations, dict) and type in expirations:
+            protections += f"{type}={restrictions[type]}"
+            if isinstance(expirations, dict):
                 if expiry:
                     expiry += "|"
-                expiry += expirations[type]
-            elif isinstance(expirations, dict):
-                if expiry:
-                    expiry += "|"
-                expiry += "indefinite"
+                expiry += expirations[type] if type in expirations else "indefinite"
         params = {
             "action": "protect",
             "title": self.title,
@@ -856,10 +824,7 @@ class Page(object):
         return int(self.pageid) ^ hash(self.site.apibase)
 
     def __str__(self):
-        if self.title:
-            title = self.title
-        else:
-            title = "pageid: " + self.pageid
+        title = self.title if self.title else f"pageid: {self.pageid}"
         return (
             self.__class__.__name__
             + " "
@@ -869,10 +834,7 @@ class Page(object):
         )
 
     def __repr__(self):
-        if self.title:
-            title = self.title
-        else:
-            title = "pageid: " + self.pageid
+        title = self.title if self.title else f"pageid: {self.pageid}"
         return (
             "<"
             + self.__module__
@@ -891,9 +853,8 @@ class Page(object):
         if self.title:
             if self.title == other.title and self.site == other.site:
                 return True
-        else:
-            if self.pageid == other.pageid and self.site == other.site:
-                return True
+        elif self.pageid == other.pageid and self.site == other.site:
+            return True
         return False
 
     def __ne__(self, other):
@@ -902,7 +863,6 @@ class Page(object):
         if self.title:
             if self.title == other.title and self.site == other.site:
                 return False
-        else:
-            if self.pageid == other.pageid and self.site == other.site:
-                return False
+        elif self.pageid == other.pageid and self.site == other.site:
+            return False
         return True

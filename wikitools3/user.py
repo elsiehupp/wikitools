@@ -120,10 +120,7 @@ class User:
         self.editcount = int(user["editcount"])
         if "groups" in user:
             self.groups = user["groups"]
-        if "blockedby" in user:
-            self.blocked = True
-        else:
-            self.blocked = False
+        self.blocked = "blockedby" in user
         return self
 
     def getTalkPage(self, check=True, followRedir=False):
@@ -147,10 +144,7 @@ class User:
         }
         req = api.APIRequest(self.site, params)
         res = req.query(False)
-        if len(res["query"]["blocks"]) > 0:
-            self.blocked = True
-        else:
-            self.blocked = False
+        self.blocked = len(res["query"]["blocks"]) > 0
         return self.blocked
 
     def block(
@@ -227,16 +221,12 @@ class User:
     def __eq__(self, other):
         if not isinstance(other, User):
             return False
-        if self.name == other.name and self.site == other.site:
-            return True
-        return False
+        return self.name == other.name and self.site == other.site
 
     def __ne__(self, other):
         if not isinstance(other, User):
             return True
-        if self.name == other.name and self.site == other.site:
-            return False
-        return True
+        return self.name != other.name or self.site != other.site
 
     def __str__(self):
         return (

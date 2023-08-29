@@ -88,7 +88,7 @@ class Wiki:
             if httppass is None:
                 from getpass import getpass
 
-                self.httppass = getpass("HTTP Auth password for " + httpuser + ": ")
+                self.httppass = getpass(f"HTTP Auth password for {httpuser}: ")
             if preauth:
                 self.httppass = httppass
                 self.auth = httpuser
@@ -100,7 +100,7 @@ class Wiki:
             self.auth = None
         self.maxlag = 5
         self.maxwaittime = 120
-        self.useragent = "python-wikitools3/%s" % VERSION
+        self.useragent = f"python-wikitools3/{VERSION}"
         self.cookiepath = ""
         self.limit = 500
         self.siteinfo = {}
@@ -138,23 +138,22 @@ class Wiki:
             self.namespaces[nsinfo["id"]] = nsinfo
             if ns != "0":
                 try:
-                    attr = "NS_%s" % (nsdata[ns]["canonical"].replace(" ", "_").upper())
+                    attr = f'NS_{nsdata[ns]["canonical"].replace(" ", "_").upper()}'
                 except KeyError:
-                    attr = "NS_%s" % (nsdata[ns]["*"].replace(" ", "_").upper())
+                    attr = f'NS_{nsdata[ns]["*"].replace(" ", "_").upper()}'
             else:
                 attr = "NS_MAIN"
             setattr(self, attr, Namespace(ns))
-        nsaliasdata = info["query"]["namespacealiases"]
-        if nsaliasdata:
+        if nsaliasdata := info["query"]["namespacealiases"]:
             for ns in nsaliasdata:
                 self.NSaliases[ns["*"]] = ns["id"]
-        if not "writeapi" in sidata:
+        if "writeapi" not in sidata:
             warnings.warn(
                 UserWarning,
                 "WARNING: Write-API not enabled, you will not be able to edit",
             )
         version = re.search("\d\.(\d\d)", self.siteinfo["generator"])
-        if not int(version.group(1)) >= 13:  # Will this even work on 13?
+        if int(version.group(1)) < 13:  # Will this even work on 13?
             warnings.warn(
                 UserWarning,
                 "WARNING: Some features may not work on older versions of MediaWiki",
@@ -187,10 +186,8 @@ class Wiki:
         if not force:
             try:
                 cookiefile = (
-                    self.cookiepath
-                    + str(hash(username + " - " + self.apibase))
-                    + ".cookies"
-                )
+                    self.cookiepath + str(hash(f"{username} - {self.apibase}"))
+                ) + ".cookies"
                 self.cookies.load(self, cookiefile, True, True)
                 self.username = username
                 if not verify or self.isLoggedIn(self.username):
@@ -200,7 +197,7 @@ class Wiki:
         if not password:
             from getpass import getpass
 
-            password = getpass("Wiki password for " + username + ": ")
+            password = getpass(f"Wiki password for {username}: ")
 
         def loginerror(info):
             try:
@@ -248,13 +245,11 @@ class Wiki:
             self.limit = 5000
         if remember:
             cookiefile = (
-                self.cookiepath
-                + str(hash(self.username + " - " + self.apibase))
-                + ".cookies"
-            )
+                self.cookiepath + str(hash(f"{self.username} - {self.apibase}"))
+            ) + ".cookies"
             self.cookies.save(self, cookiefile, True, True)
-        if self.useragent == "python-wikitools3/%s" % VERSION:
-            self.useragent = "python-wikitools3/%s (User:%s)" % (VERSION, self.username)
+        if self.useragent == f"python-wikitools3/{VERSION}":
+            self.useragent = f"python-wikitools3/{VERSION} (User:{self.username})"
         return True
 
     def logout(self):
@@ -262,10 +257,8 @@ class Wiki:
         if self.maxlag < 120:
             params["maxlag"] = 120
         cookiefile = (
-            self.cookiepath
-            + str(hash(self.username + " - " + self.apibase))
-            + ".cookies"
-        )
+            self.cookiepath + str(hash(f"{self.username} - {self.apibase}"))
+        ) + ".cookies"
         try:
             os.remove(cookiefile)
         except:
@@ -277,7 +270,7 @@ class Wiki:
         self.cookies = WikiCookieJar()
         self.username = ""
         self.maxlag = 5
-        self.useragent = "python-wikitools3/%s" % VERSION
+        self.useragent = f"python-wikitools3/{VERSION}"
         self.limit = 500
         return True
 
@@ -356,7 +349,7 @@ class Wiki:
             }
             req = api.APIRequest(self, params)
             response = req.query(False)
-            token = response["query"]["tokens"][type + "token"]
+            token = response["query"]["tokens"][f"{type}token"]
         else:
             if type not in [
                 "edit",
@@ -389,31 +382,20 @@ class Wiki:
         return hash(self.apibase)
 
     def __eq__(self, other):
-        if not isinstance(other, Wiki):
-            return False
-        if self.apibase == other.apibase:
-            return True
-        return False
+        return False if not isinstance(other, Wiki) else self.apibase == other.apibase
 
     def __ne__(self, other):
-        if not isinstance(other, Wiki):
-            return True
-        if self.apibase == other.apibase:
-            return False
-        return True
+        return True if not isinstance(other, Wiki) else self.apibase != other.apibase
 
     def __str__(self):
         if self.username:
-            user = " - using User:" + self.username
+            user = f" - using User:{self.username}"
         else:
             user = " - not logged in"
         return self.domain + user
 
     def __repr__(self):
-        if self.username:
-            user = " User:" + self.username
-        else:
-            user = " not logged in"
+        user = f" User:{self.username}" if self.username else " not logged in"
         return (
             "<"
             + self.__module__
@@ -435,45 +417,41 @@ class WikiCookieJar(http.cookiejar.FileCookieJar):
         if not filename:
             filename = self.filename
         old_umask = os.umask(0o077)
-        f = open(filename, "w")
-        f.write("")
-        content = ""
-        for c in self:
-            if not ignore_discard and c.discard:
-                continue
-            if not ignore_expires and c.is_expired:
-                continue
-            cook = pickle.dumps(c, 2)
-            f.write(cook + "|~|")
-        content += (
-            str(int(time.time())) + "|~|"
-        )  # record the current time so we can test for expiration later
-        content += "site.limit = %d;" % (
-            site.limit
-        )  # This eventially might have more stuff in it
-        f.write(content)
-        f.close()
+        with open(filename, "w") as f:
+            f.write("")
+            content = ""
+            for c in self:
+                if not ignore_discard and c.discard:
+                    continue
+                if not ignore_expires and c.is_expired:
+                    continue
+                cook = pickle.dumps(c, 2)
+                f.write(f"{cook}|~|")
+            content += f"{int(time.time())}|~|"
+            content += "site.limit = %d;" % (
+                site.limit
+            )  # This eventially might have more stuff in it
+            f.write(content)
         os.umask(old_umask)
 
     def load(self, site, filename, ignore_discard, ignore_expires):
-        f = open(filename, "r")
-        cookies = f.read().split("|~|")
-        saved = cookies[len(cookies) - 2]
-        if (
-            int(time.time()) - int(saved) > 1296000
-        ):  # 15 days, not sure when the cookies actually expire...
-            f.close()
-            os.remove(filename)
-            raise CookiesExpired
-        sitedata = cookies[len(cookies) - 1]
-        del cookies[len(cookies) - 2]
-        del cookies[len(cookies) - 1]
-        for c in cookies:
-            cook = pickle.loads(c)
-            if not ignore_discard and cook.discard:
-                continue
-            if not ignore_expires and cook.is_expired:
-                continue
-            self.set_cookie(cook)
-        exec(sitedata)
-        f.close()
+        with open(filename, "r") as f:
+            cookies = f.read().split("|~|")
+            saved = cookies[len(cookies) - 2]
+            if (
+                int(time.time()) - int(saved) > 1296000
+            ):  # 15 days, not sure when the cookies actually expire...
+                f.close()
+                os.remove(filename)
+                raise CookiesExpired
+            sitedata = cookies[len(cookies) - 1]
+            del cookies[len(cookies) - 2]
+            del cookies[len(cookies) - 1]
+            for c in cookies:
+                cook = pickle.loads(c)
+                if not ignore_discard and cook.discard:
+                    continue
+                if not ignore_expires and cook.is_expired:
+                    continue
+                self.set_cookie(cook)
+            exec(sitedata)

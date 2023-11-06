@@ -375,7 +375,7 @@ class Wiki:
                 token = response["query"]["pages"][pid]["edittoken"]
             else:
                 pages = response["query"]["pages"]
-                token = pages.itervalues().next()["edittoken"]
+                token = next(iter(pages.values()))["edittoken"]
         return token
 
     def __hash__(self):

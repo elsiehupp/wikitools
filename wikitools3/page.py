@@ -166,7 +166,7 @@ class Page(object):
             params["redirects"] = ""
         req = api.APIRequest(self.site, params)
         response = req.query(False)
-        self.pageid = response["query"]["pages"].keys()[0]
+        self.pageid = int(list(response["query"]["pages"].keys())[0])
         if self.pageid > 0:
             self.exists = True
         if "missing" in response["query"]["pages"][str(self.pageid)]:

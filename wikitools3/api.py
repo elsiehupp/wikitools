@@ -96,7 +96,7 @@ class APIRequest:
         self.response = False
         if wiki.auth:
             self.headers["Authorization"] = "Basic {0}".format(
-                base64.encodestring(f"{wiki.auth}:{wiki.httppass}".encode()).decode()
+                base64.encodebytes(f"{wiki.auth}:{wiki.httppass}".encode()).decode()
             ).replace("\n", "")
         if hasattr(wiki, "passman"):
             self.opener = urllib.request.build_opener(

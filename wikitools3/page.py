@@ -185,7 +185,7 @@ class Page(object):
                 self.unprefixedtitle = self.title.split(":", 1)[1]
             else:
                 self.unprefixedtitle = self.title
-        self.pageid = int(self.pageid)
+        self.pageid = self.pageid
         self.pageid = max(self.pageid, 0)
         return self
 
